@@ -1,69 +1,107 @@
-import time
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Загрузка изображения
+image_path = 'images/variant-7.jpg'
+image = cv2.imread(image_path)
+
+# Проверка загрузки изображения
+if image is None:
+    raise ValueError(f"Не удалось загрузить изображение по пути: {image_path}")
+
+# Отразить по горизонтали
+flipped_image = cv2.flip(image, 1)
+
+# Перевернуть
+flipped_and_rotated_image = cv2.flip(flipped_image, 0)
+
+# Сохранение преобразованного изображения
+output_path = 'images/variant-7-transformed.jpg'
+cv2.imwrite(output_path, flipped_and_rotated_image)
+
+# Отображение исходного и преобразованного изображений
+plt.figure(figsize=(10, 5))
+
+plt.subplot(1, 2, 1)
+plt.title('Исходное изображение')
+plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+plt.axis('off')
+
+plt.subplot(1, 2, 2)
+plt.title('Преобразованное изображение')
+plt.imshow(cv2.cvtColor(flipped_and_rotated_image, cv2.COLOR_BGR2RGB))
+plt.axis('off')
+
+plt.show()
 
 import cv2
+import numpy as np
 
+def find_marker(image):
+    # Преобразование изображения в градации серого
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # Применение гауссового размытия
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    # Применение порогового значения
+    _, thresh = cv2.threshold(blurred, 60, 255, cv2.THRESH_BINARY)
+    
+    # Поиск контуров
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if contours:
+        # Выбор самого большого контура
+        largest_contour = max(contours, key=cv2.contourArea)
+        return largest_contour
+    return None
 
-def image_processing():
-    img = cv2.imread('img_test.jpg')
-    #cv2.imshow('image', img)
-    w, h = img.shape[:2]
-    #(cX, cY) = (w // 2, h // 2)
-    #M = cv2.getRotationMatrix2D((cX, cY), 45, 1.0)
-    #rotated = cv2.warpAffine(img, M, (w, h))
-    #cv2.imshow('rotated', rotated)
+def draw_distance_to_center(image, marker_contour):
+    moments = cv2.moments(marker_contour)
+    if moments['m00'] == 0:
+        return
+    
+    # Координаты центра метки
+    center_x = int(moments['m10'] / moments['m00'])
+    center_y = int(moments['m01'] / moments['m00'])
+    
+    # Координаты центра кадра
+    frame_center_x = image.shape[1] // 2
+    frame_center_y = image.shape[0] // 2
+    
+    # Вычисление расстояния до центра кадра
+    distance_x = center_x - frame_center_x
+    distance_y = center_y - frame_center_y
+    
+    # Отрисовка центра метки
+    cv2.circle(image, (center_x, center_y), 10, (0, 255, 0), -1)
+    # Отрисовка центра кадра
+    cv2.circle(image, (frame_center_x, frame_center_y), 10, (255, 0, 0), -1)
+    
+    # Отображение расстояния
+    text = f'Distance to center: ({distance_x}, {distance_y}) px'
+    cv2.putText(image, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
-    #cat = img[250:580, 20:280]
-    #cv2.imshow('image', cat)
+# Захват видео с камеры
+cap = cv2.VideoCapture(0)
 
-    #r = cv2.selectROI(img)
-    #image_cropped = img[int(r[1]):int(r[1] + r[3]), int(r[0]):int(r[0] + r[2])]
-    #cv2.imshow('cropped', image_cropped)
+if not cap.isOpened():
+    raise ValueError("Не удалось открыть камеру")
 
-    cv2.line(img, (0, 0), (580, 600), (255, 0, 0), 5)
-    cv2.rectangle(img, (384, 10), (580, 128), (0, 252, 0), 3)
-    cv2.putText(img, 'Lab. No 8', (10, 500), cv2.FONT_HERSHEY_SIMPLEX, 3,
-                (0, 0, 255), 2, cv2.LINE_AA)
-    cv2.imshow('img', img)
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
+    
+    marker_contour = find_marker(frame)
+    if marker_contour is not None:
+        draw_distance_to_center(frame, marker_contour)
+    
+    # Отображение кадра
+    cv2.imshow('Tracking', frame)
+    
+    # Прерывание по нажатию клавиши 'q'
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
 
-
-def video_processing():
-    cap = cv2.VideoCapture(1)
-    down_points = (640, 480)
-    i = 0
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        frame = cv2.resize(frame, down_points, interpolation=cv2.INTER_LINEAR)
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        gray = cv2.GaussianBlur(gray, (21, 21), 0)
-        ret, thresh = cv2.threshold(gray, 110, 255, cv2.THRESH_BINARY_INV)
-
-        contours, hierarchy = cv2.findContours(thresh,
-                            cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-        if len(contours) > 0:
-            c = max(contours, key=cv2.contourArea)
-            x, y, w, h = cv2.boundingRect(c)
-            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-            if i % 5 == 0:
-                a = x + (w // 2)
-                b = y + (h // 2)
-                print(a, b)
-
-        cv2.imshow('frame', frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-        time.sleep(0.1)
-        i += 1
-
-    cap.release()
-
-
-if __name__ == '__main__':
-    #image_processing()
-    video_processing()
-
-cv2.waitKey(0)
+cap.release()
 cv2.destroyAllWindows()
